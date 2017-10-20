@@ -57,6 +57,11 @@ The improvements are...
 Improvements to clang-tidy
 --------------------------
 
+- New `misc-infinite-loop
+  <http://clang.llvm.org/extra/clang-tidy/checks/misc-infinite-loop.html>`_ check
+
+  FIXME: add release notes.
+
 - Renamed checks to use correct term "implicit conversion" instead of "implicit
   cast" and modified messages and option names accordingly:
 
