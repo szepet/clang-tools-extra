@@ -13,6 +13,7 @@
 #include "DefinitionsInHeadersCheck.h"
 #include "ForwardingReferenceOverloadCheck.h"
 #include "IncorrectRoundings.h"
+#include "InfiniteLoopCheck.h"
 #include "LambdaFunctionNameCheck.h"
 #include "MacroParenthesesCheck.h"
 #include "MacroRepeatedSideEffectsCheck.h"
@@ -52,6 +53,8 @@ public:
   void addCheckFactories(ClangTidyCheckFactories &CheckFactories) override {
     CheckFactories.registerCheck<ForwardingReferenceOverloadCheck>(
         "misc-forwarding-reference-overload");
+    CheckFactories.registerCheck<InfiniteLoopCheck>(
+        "misc-infinite-loop");
     CheckFactories.registerCheck<LambdaFunctionNameCheck>(
         "misc-lambda-function-name");
     CheckFactories.registerCheck<MisplacedConstCheck>("misc-misplaced-const");
