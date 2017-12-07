@@ -47,7 +47,7 @@ void simple_not_infinite() {
     Limit--;
   } while (i < Limit);
 
-  for (i = 0; i < Limit;Limit--) {
+  for (i = 0; i < Limit; Limit--) {
   }
 }
 
@@ -90,7 +90,8 @@ void escape_after() {
 
 int glob;
 void glob_var(int &x) {
-  int i = 0, Limit = 100;
+  int i = 0;
+  int Limit = 100;
   while (x < Limit) { // Not an error since 'x' can be an alias of glob.
     glob++;
   }
@@ -100,5 +101,14 @@ void glob_var2() {
   int i = 0, Limit = 100;
   while (glob < Limit) { // Since 'glob' is declared out of the function we do not warn.
     i++;
+  }
+}
+
+bool foo(int n);
+void fun_call() {
+  int i = 0;
+  int Limit = 100;
+  while (foo(i)) { // Do not warn, since foo can have state.
+    Limit--;
   }
 }

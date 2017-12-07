@@ -26,10 +26,15 @@ static internal::Matcher<Stmt> loopEndingStmt() {
 
 void InfiniteLoopCheck::registerMatchers(MatchFinder *Finder) {
   const auto loopCondition = []() {
-    return allOf(hasCondition(expr().bind("condition")),
-                 anyOf(hasAncestor(lambdaExpr().bind("containing-lambda")),
-                       hasAncestor(functionDecl().bind("containing-func"))),
-                 unless(hasBody(hasDescendant(loopEndingStmt()))));
+    return allOf(
+        hasCondition(expr().bind("condition")),
+        anyOf(hasAncestor(lambdaExpr().bind("containing-lambda")),
+              hasAncestor(functionDecl().bind("containing-func"))),
+        unless(
+            anyOf(hasBody(hasDescendant(loopEndingStmt())),
+                  // Exclude the cases where the condition contain function
+                  // calls. They can possibly change the program state.
+                  hasCondition(anyOf(callExpr(), hasDescendant(callExpr()))))));
   };
 
   Finder->addMatcher(
