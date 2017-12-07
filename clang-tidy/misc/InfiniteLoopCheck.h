@@ -16,7 +16,9 @@ namespace clang {
 namespace tidy {
 namespace misc {
 
-/// FIXME: Write a short description.
+/// The checker aims to find loops where none of the condition variables are
+/// updated in the body. This performs a very conservative check in order to
+/// avoid false positives and work only on integer types at the moment.
 ///
 /// For the user-facing documentation see:
 /// http://clang.llvm.org/extra/clang-tidy/checks/misc-infinite-loop.html
