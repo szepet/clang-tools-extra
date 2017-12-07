@@ -85,14 +85,29 @@ static internal::Matcher<Stmt> escapeStmt(const VarDecl *VD) {
                     assignedToRef(equalsNode(VD))));
 }
 
-static internal::Matcher<Stmt> potentiallyChangeValStmt(const VarDecl *VD) {
-  return hasDescendant(
-      stmt(anyOf(changeByOperator(equalsNode(VD)), escapeStmt(VD))));
+static internal::Matcher<Stmt> potentiallyModifyVarStmt(const VarDecl *VD) {
+  return anyOf(hasDescendant(stmt(
+                   anyOf(changeByOperator(equalsNode(VD)), escapeStmt(VD)))),
+               stmt(anyOf(changeByOperator(equalsNode(VD)), escapeStmt(VD))));
+}
+
+std::unique_ptr<ExprSequence> createSequence(Stmt *FunctionBody,
+                                             ASTContext &ASTCtx) {
+  CFG::BuildOptions Options;
+  Options.AddImplicitDtors = true;
+  Options.AddTemporaryDtors = true;
+  std::unique_ptr<CFG> TheCFG =
+      CFG::buildCFG(nullptr, FunctionBody, &ASTCtx, Options);
+  if (!TheCFG)
+    return std::unique_ptr<ExprSequence>();
+
+  return llvm::make_unique<ExprSequence>(
+      *(new ExprSequence(TheCFG.get(), &ASTCtx)));
 }
 
 void InfiniteLoopCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *ContainingLambda =
-         Result.Nodes.getNodeAs<LambdaExpr>("containing-lambda");
+      Result.Nodes.getNodeAs<LambdaExpr>("containing-lambda");
   const auto *ContainingFunc =
       Result.Nodes.getNodeAs<FunctionDecl>("containing-func");
   const auto *Cond = Result.Nodes.getNodeAs<Expr>("condition");
@@ -110,60 +125,56 @@ void InfiniteLoopCheck::check(const MatchFinder::MatchResult &Result) {
   auto CondVarMatches =
       match(findAll(declRefExpr(to(varDecl().bind("condvar")))), *Cond, ASTCtx);
 
-  CFG::BuildOptions Options;
-  Options.AddImplicitDtors = true;
-  Options.AddTemporaryDtors = true;
-  std::unique_ptr<CFG> TheCFG =
-      CFG::buildCFG(nullptr, FunctionBody, &ASTCtx, Options);
-  if (!TheCFG)
-    return;
-  std::unique_ptr<ExprSequence> Sequence;
-  Sequence.reset(new ExprSequence(TheCFG.get(), &ASTCtx));
-  llvm::errs() << "============================\n";
-  llvm::errs() << "FUNCTIONNAME: " << ContainingFunc->getNameAsString() << "\n";
+  std::unique_ptr<ExprSequence> Sequence = createSequence(FunctionBody, ASTCtx);
+
   for (auto &E : CondVarMatches) {
     const VarDecl *CondVar = E.getNodeAs<VarDecl>("condvar");
-    llvm::errs() << "var:" << CondVar->getNameAsString() << "\n";
 
     // TODO: handle cases with non-integer condition variables
-    if (!CondVar->getType().getTypePtr()->isIntegerType()) {
-      CondVar->getType().getTypePtr()->dump();
-      llvm::errs() << CondVar->getType().getAsString();
-      llvm::errs() << "not an integer type\n";
+    if (!CondVar->getType().getTypePtr()->isIntegerType())
       return;
-    }
+
     // In case the loop potentially changes any of the condition variables we
     // assume the loop is not infinite.
-    auto Match = match(potentiallyChangeValStmt(CondVar), *LoopStmt, ASTCtx);
-    if (!Match.empty()) {
-      llvm::errs() << "loop hasSuspiciousStmt\n";
-      return;
+    SmallVector<BoundNodes, 1> Match;
+    // In case of for loop we check the increment stmt and the body for changes
+    // (excluding the init stmt).
+    if (auto ForLoop = dyn_cast<ForStmt>(LoopStmt)) {
+      if (ForLoop->getInc())
+        Match = match(potentiallyModifyVarStmt(CondVar), *ForLoop->getInc(),
+                      ASTCtx);
+      if (Match.empty() && ForLoop->getBody())
+        Match = match(potentiallyModifyVarStmt(CondVar), *ForLoop->getBody(),
+                      ASTCtx);
+    } else {
+      // In cases of while and do-while we can match the whole loop.
+      Match = match(potentiallyModifyVarStmt(CondVar), *LoopStmt, ASTCtx);
     }
+    if (!Match.empty())
+      return;
+
     // Skip the cases where any of the condition variables come from outside
-    // of the loop in order to avoid false positives.
+    // of the function in order to avoid false positives.
     Match = match(stmt(hasDescendant(varDecl(equalsNode(CondVar)))),
                   *FunctionBody, ASTCtx);
-    if (Match.empty()) {
-      llvm::errs() << "var declared outside of the function\n";
+    if (Match.empty())
       return;
-    }
+
     // When a condition variable is escaped before the loop we skip since we
     // have no precise pointer analysis and want to avoid false positives.
     Match = match(
         stmt(forEachDescendant(stmt(escapeStmt(CondVar)).bind("escStmt"))),
         *FunctionBody, ASTCtx);
-    for (auto &M : Match) {
-      if (Sequence->potentiallyAfter(LoopStmt, M.getNodeAs<Stmt>("escStmt"))) {
-        llvm::errs() << "escape before loop\n";
+    for (auto &ES : Match) {
+      if (Sequence->potentiallyAfter(LoopStmt, ES.getNodeAs<Stmt>("escStmt")))
         return;
-      }
     }
   }
 
   // Creating the string containing the name of condition variables.
   std::string CondVarNames = "";
-  for (auto &E : CondVarMatches) {
-    CondVarNames += E.getNodeAs<VarDecl>("condvar")->getNameAsString() + ", ";
+  for (auto &CVM : CondVarMatches) {
+    CondVarNames += CVM.getNodeAs<VarDecl>("condvar")->getNameAsString() + ", ";
   }
   CondVarNames.resize(CondVarNames.size() - 2);
 
