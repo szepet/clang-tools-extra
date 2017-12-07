@@ -3,9 +3,9 @@
 misc-infinite-loop
 ==================
 
-The checker aims to find loops where none of the condition variables are
-updated in the body. This performs a very conservative check in order to
-avoid false positives and work only on integer types at the moment.
+Finds loops where none of the condition variables are updated in the body. This
+performs a very conservative check in order to avoid false positives and work
+only on integer types at the moment.
 
 Examples:
 

@@ -60,8 +60,8 @@ Improvements to clang-tidy
 - New `misc-infinite-loop
   <http://clang.llvm.org/extra/clang-tidy/checks/misc-infinite-loop.html>`_ check
 
-  The checker aims to find loops where none of the
-  condition variables are updated in the body.
+  The check finds loops where none of the condition variables are updated in the
+  body.
 
 - The 'misc-move-constructor-init' check was renamed to `performance-move-constructor-init
   <http://clang.llvm.org/extra/clang-tidy/checks/performance-move-constructor-init.html>`_
