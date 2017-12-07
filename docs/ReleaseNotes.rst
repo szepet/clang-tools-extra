@@ -158,6 +158,11 @@ Improvements to clang-tidy
   Finds uses of bitwise operations on signed integer types, which may lead to 
   undefined or implementation defined behaviour.
 
+- New `misc-infinite-loop
+  <http://clang.llvm.org/extra/clang-tidy/checks/misc-infinite-loop.html>`_ check
+
+  Finds loops where none of the condition variables are updated in the body.
+
 - New `objc-avoid-nserror-init
   <http://clang.llvm.org/extra/clang-tidy/checks/objc-avoid-nserror-init.html>`_ check
 

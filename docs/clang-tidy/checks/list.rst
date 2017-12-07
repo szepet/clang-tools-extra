@@ -120,6 +120,7 @@ Clang-Tidy Checks
    misc-definitions-in-headers
    misc-forwarding-reference-overload
    misc-incorrect-roundings
+   misc-infinite-loop
    misc-lambda-function-name
    misc-macro-parentheses
    misc-macro-repeated-side-effects
