@@ -1,4 +1,4 @@
-//===--- UseAfterMoveCheck.cpp - clang-tidy -------------------------------===//
+//===--- InfiniteLoopCheck.cpp - clang-tidy -------------------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -8,12 +8,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "InfiniteLoopCheck.h"
-
 #include "../utils/ExprSequence.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/Analysis/CFG.h"
-#include "clang/Lex/Lexer.h"
 
 using namespace clang::ast_matchers;
 using namespace clang::tidy::utils;
@@ -93,14 +91,22 @@ static internal::Matcher<Stmt> potentiallyChangeValStmt(const VarDecl *VD) {
 }
 
 void InfiniteLoopCheck::check(const MatchFinder::MatchResult &Result) {
-  // const auto *ContainingLambda =
-  //        Result.Nodes.getNodeAs<LambdaExpr>("containing-lambda");
+  const auto *ContainingLambda =
+         Result.Nodes.getNodeAs<LambdaExpr>("containing-lambda");
   const auto *ContainingFunc =
       Result.Nodes.getNodeAs<FunctionDecl>("containing-func");
   const auto *Cond = Result.Nodes.getNodeAs<Expr>("condition");
   const auto *LoopStmt = Result.Nodes.getNodeAs<Stmt>("loop-stmt");
-
   auto &ASTCtx = *Result.Context;
+
+  Stmt *FunctionBody = nullptr;
+  if (ContainingLambda)
+    FunctionBody = ContainingLambda->getBody();
+  else if (ContainingFunc)
+    FunctionBody = ContainingFunc->getBody();
+  else
+    return;
+
   auto CondVarMatches =
       match(findAll(declRefExpr(to(varDecl().bind("condvar")))), *Cond, ASTCtx);
 
@@ -108,7 +114,7 @@ void InfiniteLoopCheck::check(const MatchFinder::MatchResult &Result) {
   Options.AddImplicitDtors = true;
   Options.AddTemporaryDtors = true;
   std::unique_ptr<CFG> TheCFG =
-      CFG::buildCFG(nullptr, ContainingFunc->getBody(), &ASTCtx, Options);
+      CFG::buildCFG(nullptr, FunctionBody, &ASTCtx, Options);
   if (!TheCFG)
     return;
   std::unique_ptr<ExprSequence> Sequence;
@@ -135,8 +141,8 @@ void InfiniteLoopCheck::check(const MatchFinder::MatchResult &Result) {
     }
     // Skip the cases where any of the condition variables come from outside
     // of the loop in order to avoid false positives.
-    Match = match(decl(hasDescendant(varDecl(equalsNode(CondVar)))),
-                  *ContainingFunc, ASTCtx);
+    Match = match(stmt(hasDescendant(varDecl(equalsNode(CondVar)))),
+                  *FunctionBody, ASTCtx);
     if (Match.empty()) {
       llvm::errs() << "var declared outside of the function\n";
       return;
@@ -144,8 +150,8 @@ void InfiniteLoopCheck::check(const MatchFinder::MatchResult &Result) {
     // When a condition variable is escaped before the loop we skip since we
     // have no precise pointer analysis and want to avoid false positives.
     Match = match(
-        decl(forEachDescendant(stmt(escapeStmt(CondVar)).bind("escStmt"))),
-        *ContainingFunc, ASTCtx);
+        stmt(forEachDescendant(stmt(escapeStmt(CondVar)).bind("escStmt"))),
+        *FunctionBody, ASTCtx);
     for (auto &M : Match) {
       if (Sequence->potentiallyAfter(LoopStmt, M.getNodeAs<Stmt>("escStmt"))) {
         llvm::errs() << "escape before loop\n";
